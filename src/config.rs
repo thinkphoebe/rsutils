@@ -15,7 +15,6 @@ pub fn load<'a, T>(
     println!("default:{:?}, user_file:{:?}", default_file, user_file);
 
     let cfg_cmdline: T = T::from_args();
-    println!("conf from command line:\n{:#?}", cfg_cmdline);
 
     let mut default_file = default_file;
 
@@ -48,7 +47,7 @@ pub fn load<'a, T>(
             return Err(anyhow!("read conf default FAILED! {}", e));
         }
     }
-    println!("conf default:\n{:#?}", serde_json::from_value::<T>(cfg.clone()).unwrap());
+    println!("================================> conf default:\n{:#?}", cfg);
 
     if user_file.is_some() {
         let user_str = std::fs::read_to_string(user_file.as_ref().unwrap());
@@ -58,6 +57,7 @@ pub fn load<'a, T>(
                 let r = serde_json::from_reader::<StripComments<&[u8]>, serde_json::Value>(stripped);
                 match r {
                     Ok(cfg_user) => {
+                        println!("================================> conf user:\n{:#?}", cfg_user);
                         json_merge::merge(&mut cfg, cfg_user);
                     }
                     Err(e) => {
@@ -69,16 +69,20 @@ pub fn load<'a, T>(
                 return Err(anyhow!("read conf user file FAILED! {}", e));
             }
         }
-        println!("conf merge user:\n{:#?}", serde_json::from_value::<T>(cfg.clone()).unwrap());
+        println!("================================> conf merge user:\n{:#?}", cfg);
     } else {
         // allow no conf user, but print warnings
         println!("no conf user specified");
     }
 
     let cfg_cmdline = serde_json::to_value(cfg_cmdline).unwrap();
+    println!("================================> conf cmdline:\n{:#?}", cfg_cmdline);
+
     json_merge::merge(&mut cfg, cfg_cmdline);
+    println!("================================> conf merge cmdline:\n{:#?}", cfg);
+
     let cfg: T = serde_json::from_value(cfg).unwrap();
-    println!("conf merge cmdline:\n{:#?}", cfg);
+    println!("================================> conf final:\n{:#?}", cfg);
 
     return Ok(cfg);
 }

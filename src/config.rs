@@ -3,18 +3,16 @@ use std::fmt::Debug;
 use anyhow::anyhow;
 use json_comments::StripComments;
 use serde::{Serialize, de::DeserializeOwned};
-use structopt::StructOpt;
 
 use crate::json_merge;
 
 pub fn load<'a, T>(
     default_file: Option<String>,
     user_file: Option<String>,
+    cfg_cmdline: Option<T>,
 ) -> anyhow::Result<T>
-    where T: Serialize + DeserializeOwned + StructOpt + Debug {
+    where T: Serialize + DeserializeOwned + Debug {
     println!("default:{:?}, user_file:{:?}", default_file, user_file);
-
-    let cfg_cmdline: T = T::from_args();
 
     let mut default_file = default_file;
 
@@ -75,11 +73,13 @@ pub fn load<'a, T>(
         println!("no conf user specified");
     }
 
-    let cfg_cmdline = serde_json::to_value(cfg_cmdline).unwrap();
-    println!("================================> conf cmdline:\n{:#?}", cfg_cmdline);
+    if let Some(c) = cfg_cmdline {
+        let cfg_cmdline = serde_json::to_value(c).unwrap();
+        println!("================================> conf cmdline:\n{:#?}", cfg_cmdline);
 
-    json_merge::merge(&mut cfg, cfg_cmdline);
-    println!("================================> conf merge cmdline:\n{:#?}", cfg);
+        json_merge::merge(&mut cfg, cfg_cmdline);
+        println!("================================> conf merge cmdline:\n{:#?}", cfg);
+    }
 
     let cfg: T = serde_json::from_value(cfg).unwrap();
     println!("================================> conf final:\n{:#?}", cfg);

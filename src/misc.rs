@@ -4,7 +4,9 @@ use anyhow::{anyhow, Context};
 
 pub fn relative2absolute(relative: &str, base: &str) -> anyhow::Result<String> {
     let mut path = std::path::PathBuf::from(base);
-    path.pop();
+    if !path.is_dir() {
+        path.pop();
+    }
     path.push(relative);
     path = path.canonicalize()
             .context(format!("canonicalize {:?}", path.to_str()))?;

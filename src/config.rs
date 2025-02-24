@@ -1,88 +1,98 @@
-use std::fmt::Debug;
-
 use anyhow::anyhow;
 use json_comments::StripComments;
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Serialize};
+use std::fmt::Debug;
 
 use crate::json_merge;
 
+// default 和 user 可传入 json 文件路径或 json 字符串
+// cmdline 传入 structopt 解析的命令行结构
+// 优先级：cmdline > user > default
 pub fn load<'a, T>(
-    default_file: Option<String>,
-    user_file: Option<String>,
-    cfg_cmdline: Option<T>,
+    default: Option<String>,
+    user: Option<String>,
+    cmdline: Option<T>,
 ) -> anyhow::Result<T>
-    where T: Serialize + DeserializeOwned + Debug {
-    println!("default:{:?}, user_file:{:?}", default_file, user_file);
+where
+    T: Serialize + DeserializeOwned + Debug,
+{
+    eprintln!("default:{:?}", default);
+    eprintln!("user:{:?}", user);
 
-    let mut default_file = default_file;
-
-    if default_file.is_none() {
+    let default = if let Some(v) = default {
+        v
+    } else {
         let mut path = std::env::current_exe().unwrap();
         let exe_name = path.file_stem().unwrap().to_str().unwrap().to_string();
         path.pop();
         path.push("conf");
         path.push(format!("{}.{}", exe_name, "json.default"));
-        default_file = Some(path.to_str().unwrap().to_string());
-        println!("conf_default not set, use:{}", default_file.as_ref().unwrap());
-    }
-    let default_str = std::fs::read_to_string(default_file.as_ref().unwrap());
+        let v = path.to_str().unwrap().to_string();
+        eprintln!("conf_default not set, use:{}", v);
+        v
+    };
+
     let mut cfg;
-    match default_str {
+    let mut default_str = match std::fs::read_to_string(&default) {
         Ok(s) => {
-            let stripped = StripComments::new(s.as_bytes());
-            let r = serde_json::from_reader::<StripComments<&[u8]>, serde_json::Value>(stripped);
-            match r {
-                Ok(cfg_default) => {
-                    cfg = cfg_default;
-                }
-                Err(e) => {
-                    return Err(anyhow!("decode conf default file FAILED! {}", e));
-                }
-            }
+            eprintln!("read default as file OK:{}", s);
+            s
         }
         Err(e) => {
-            // not allow no conf default
-            return Err(anyhow!("read conf default FAILED! {}", e));
+            eprintln!("read default as file err, try parse as json content:{:?}", e);
+            default
+        }
+    };
+    let stripped = StripComments::new(default_str.as_bytes());
+    let r = serde_json::from_reader::<StripComments<&[u8]>, serde_json::Value>(stripped);
+    match r {
+        Ok(cfg_default) => {
+            cfg = cfg_default;
+        }
+        Err(e) => {
+            return Err(anyhow!("decode conf default FAILED! {}", e));
         }
     }
-    println!("================================> conf default:\n{:#?}", cfg);
+    eprintln!("================================> conf default:\n{:#?}", cfg);
 
-    if user_file.is_some() {
-        let user_str = std::fs::read_to_string(user_file.as_ref().unwrap());
-        match user_str {
+    if let Some(user) = user {
+        let mut user_str = match std::fs::read_to_string(&user) {
             Ok(s) => {
-                let stripped = StripComments::new(s.as_bytes());
-                let r = serde_json::from_reader::<StripComments<&[u8]>, serde_json::Value>(stripped);
-                match r {
-                    Ok(cfg_user) => {
-                        println!("================================> conf user:\n{:#?}", cfg_user);
-                        json_merge::merge(&mut cfg, cfg_user);
-                    }
-                    Err(e) => {
-                        return Err(anyhow!("decode conf user file FAILED! {}", e));
-                    }
-                }
+                eprintln!("read user as file OK:{}", s);
+                s
             }
             Err(e) => {
-                return Err(anyhow!("read conf user file FAILED! {}", e));
+                eprintln!("read user as file err, try parse as json content:{:?}", e);
+                user
+            }
+        };
+        let stripped = StripComments::new(user_str.as_bytes());
+        let r = serde_json::from_reader::<StripComments<&[u8]>, serde_json::Value>(stripped);
+        match r {
+            Ok(cfg_user) => {
+                eprintln!("================================> conf user:\n{:#?}", cfg_user);
+                json_merge::merge(&mut cfg, cfg_user);
+            }
+            Err(e) => {
+                return Err(anyhow!("decode conf user FAILED! {}", e));
             }
         }
-        println!("================================> conf merge user:\n{:#?}", cfg);
+        eprintln!("================================> conf merge user:\n{:#?}", cfg);
     } else {
         // allow no conf user, but print warnings
-        println!("no conf user specified");
+        eprintln!("no conf user specified");
     }
 
-    if let Some(c) = cfg_cmdline {
+    if let Some(c) = cmdline {
         let cfg_cmdline = serde_json::to_value(c).unwrap();
-        println!("================================> conf cmdline:\n{:#?}", cfg_cmdline);
+        eprintln!("================================> conf cmdline:\n{:#?}", cfg_cmdline);
 
         json_merge::merge(&mut cfg, cfg_cmdline);
-        println!("================================> conf merge cmdline:\n{:#?}", cfg);
+        eprintln!("================================> conf merge cmdline:\n{:#?}", cfg);
     }
 
     let cfg: T = serde_json::from_value(cfg).unwrap();
-    println!("================================> conf final:\n{:#?}", cfg);
+    eprintln!("================================> conf final:\n{:#?}", cfg);
 
-    return Ok(cfg);
+    Ok(cfg)
 }

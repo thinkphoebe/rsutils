@@ -1,7 +1,9 @@
 pub mod misc;
 
-#[cfg(feature = "json-merge")]
+#[cfg(feature = "json")]
 pub mod json_merge;
+#[cfg(feature = "json")]
+pub mod json_diff;
 
 #[cfg(feature = "config")]
 pub mod config;
